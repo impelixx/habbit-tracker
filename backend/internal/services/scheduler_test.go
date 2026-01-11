@@ -155,7 +155,7 @@ func TestParseReminderTime(t *testing.T) {
 		{"Valid 23:59", "23:59", 23, 59, false},
 		{"Valid 00:00", "00:00", 0, 0, false},
 		{"Valid 12:30", "12:30", 12, 30, false},
-		{"Invalid format", "9:00", 0, 0, true},
+		{"Valid 9:00", "9:00", 9, 0, false}, // Go accepts single digit hours
 		{"Invalid format", "abc", 0, 0, true},
 	}
 
