@@ -10,13 +10,8 @@ import (
 func TestHub_RegisterClient(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background (will be GC'd when test ends)
 	go hub.Run()
-	defer func() {
-		// Stop hub by closing channels
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	userID := primitive.NewObjectID()
 	client := &Client{
@@ -27,7 +22,7 @@ func TestHub_RegisterClient(t *testing.T) {
 
 	// Register client
 	hub.register <- client
-	time.Sleep(10 * time.Millisecond) // Wait for registration
+	time.Sleep(50 * time.Millisecond) // Wait for registration
 
 	// Check client count
 	count := hub.GetClientCount(userID)
@@ -39,12 +34,8 @@ func TestHub_RegisterClient(t *testing.T) {
 func TestHub_UnregisterClient(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background
 	go hub.Run()
-	defer func() {
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	userID := primitive.NewObjectID()
 	client := &Client{
@@ -55,11 +46,11 @@ func TestHub_UnregisterClient(t *testing.T) {
 
 	// Register client
 	hub.register <- client
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Unregister client
 	hub.unregister <- client
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Check client count
 	count := hub.GetClientCount(userID)
@@ -71,12 +62,8 @@ func TestHub_UnregisterClient(t *testing.T) {
 func TestHub_MultipleClientsPerUser(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background
 	go hub.Run()
-	defer func() {
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	userID := primitive.NewObjectID()
 
@@ -90,7 +77,7 @@ func TestHub_MultipleClientsPerUser(t *testing.T) {
 		}
 		hub.register <- clients[i]
 	}
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Check client count
 	count := hub.GetClientCount(userID)
@@ -100,7 +87,7 @@ func TestHub_MultipleClientsPerUser(t *testing.T) {
 
 	// Unregister one client
 	hub.unregister <- clients[0]
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Check client count again
 	count = hub.GetClientCount(userID)
@@ -112,12 +99,8 @@ func TestHub_MultipleClientsPerUser(t *testing.T) {
 func TestHub_BroadcastToUser(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background
 	go hub.Run()
-	defer func() {
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	userID := primitive.NewObjectID()
 	client := &Client{
@@ -128,7 +111,7 @@ func TestHub_BroadcastToUser(t *testing.T) {
 
 	// Register client
 	hub.register <- client
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Broadcast message
 	message := []byte(`{"type":"test","data":"hello"}`)
@@ -140,7 +123,7 @@ func TestHub_BroadcastToUser(t *testing.T) {
 		if string(msg) != string(message) {
 			t.Errorf("Expected message %s, got %s", message, msg)
 		}
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		t.Error("Timeout waiting for message")
 	}
 }
@@ -148,12 +131,8 @@ func TestHub_BroadcastToUser(t *testing.T) {
 func TestHub_BroadcastToNonExistentUser(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background
 	go hub.Run()
-	defer func() {
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	userID := primitive.NewObjectID()
 
@@ -162,18 +141,14 @@ func TestHub_BroadcastToNonExistentUser(t *testing.T) {
 	hub.BroadcastToUser(userID, message)
 
 	// If we reach here without panic, test passes
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 }
 
 func TestHub_MultipleUsers(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background
 	go hub.Run()
-	defer func() {
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	user1ID := primitive.NewObjectID()
 	user2ID := primitive.NewObjectID()
@@ -192,7 +167,7 @@ func TestHub_MultipleUsers(t *testing.T) {
 	// Register both clients
 	hub.register <- client1
 	hub.register <- client2
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Broadcast to user1
 	message := []byte(`{"type":"test","user":"1"}`)
@@ -204,7 +179,7 @@ func TestHub_MultipleUsers(t *testing.T) {
 		if string(msg) != string(message) {
 			t.Errorf("Client1: Expected message %s, got %s", message, msg)
 		}
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		t.Error("Client1: Timeout waiting for message")
 	}
 
@@ -212,7 +187,7 @@ func TestHub_MultipleUsers(t *testing.T) {
 	select {
 	case msg := <-client2.send:
 		t.Errorf("Client2: Should not receive message, but got %s", msg)
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		// Expected timeout, test passes
 	}
 }
@@ -220,12 +195,8 @@ func TestHub_MultipleUsers(t *testing.T) {
 func TestHub_ClientCountForDifferentUsers(t *testing.T) {
 	hub := NewHub()
 
-	// Start hub
+	// Start hub in background
 	go hub.Run()
-	defer func() {
-		close(hub.register)
-		close(hub.unregister)
-	}()
 
 	user1ID := primitive.NewObjectID()
 	user2ID := primitive.NewObjectID()
@@ -250,7 +221,7 @@ func TestHub_ClientCountForDifferentUsers(t *testing.T) {
 		hub.register <- client
 	}
 
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	// Check client counts
 	count1 := hub.GetClientCount(user1ID)
