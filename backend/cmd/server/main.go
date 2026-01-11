@@ -100,10 +100,18 @@ func main() {
 	// Initialize services
 	authService := services.NewAuthService(cfg.JWTSecret, cfg.JWTExpiration, cfg.TelegramBotToken)
 
+	// Initialize reminder scheduler
+	schedulerService := services.NewSchedulerService(database, telegramService.GetBot())
+	schedulerService.Start()
+	defer schedulerService.Stop()
+	log.Info().Msg("Reminder scheduler initialized")
+
 	// Initialize handlers
 	webhookHandler := handlers.NewWebhookHandler(telegramService)
 	authHandler := handlers.NewAuthHandler(authService, database)
 	tasksHandler := handlers.NewTasksHandler(database)
+	remindersHandler := handlers.NewRemindersHandler(database)
+	statsHandler := handlers.NewStatsHandler(database)
 
 	// Routes
 	api := app.Group("/api")
@@ -117,14 +125,22 @@ func main() {
 	// Protected routes (require JWT auth)
 	protected := api.Group("", middleware.AuthMiddleware(authService))
 	protected.Get("/auth/me", authHandler.GetMe)
+
+	// Tasks
 	protected.Get("/tasks", tasksHandler.GetTasks)
 	protected.Post("/tasks", tasksHandler.CreateTask)
 	protected.Patch("/tasks/:id", tasksHandler.UpdateTask)
 	protected.Delete("/tasks/:id", tasksHandler.DeleteTask)
 
-	// TODO: Add more routes
-	// - /api/stats
-	// - /api/reminders
+	// Statistics
+	protected.Get("/stats", statsHandler.GetStats)
+
+	// Reminders
+	protected.Get("/reminders", remindersHandler.GetReminder)
+	protected.Post("/reminders/set", remindersHandler.SetReminder)
+	protected.Delete("/reminders", remindersHandler.DeleteReminder)
+
+	// TODO: Add WebSocket route
 	// - /api/ws (WebSocket)
 
 	// Start server in a goroutine
