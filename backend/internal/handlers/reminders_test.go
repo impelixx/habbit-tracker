@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func TestValidateReminderTime(t *testing.T) {
@@ -63,7 +64,8 @@ func TestValidateTimezone(t *testing.T) {
 }
 
 func TestNewReminder(t *testing.T) {
-	userID := "507f1f77bcf86cd799439011" // Valid ObjectID string
+	userIDStr := "507f1f77bcf86cd799439011" // Valid ObjectID string
+	userID, _ := primitive.ObjectIDFromHex(userIDStr)
 	reminderTime := "09:00"
 	timezone := "UTC"
 
@@ -75,8 +77,8 @@ func TestNewReminder(t *testing.T) {
 		Enabled:  true,
 	}
 
-	if reminder.UserID != userID {
-		t.Errorf("Expected UserID %s, got %s", userID, reminder.UserID)
+	if reminder.UserID.Hex() != userIDStr {
+		t.Errorf("Expected UserID %s, got %s", userIDStr, reminder.UserID.Hex())
 	}
 
 	if reminder.Time != reminderTime {
