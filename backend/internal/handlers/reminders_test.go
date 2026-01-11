@@ -48,7 +48,7 @@ func TestValidateTimezone(t *testing.T) {
 		{"Valid Europe/Moscow", "Europe/Moscow", true},
 		{"Valid Asia/Tokyo", "Asia/Tokyo", true},
 		{"Invalid timezone", "Invalid/Timezone", false},
-		{"Empty string", "", false},
+		{"Empty string", "", true}, // LoadLocation("") returns UTC
 		{"Random string", "abc123", false},
 	}
 

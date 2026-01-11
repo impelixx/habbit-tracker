@@ -16,7 +16,7 @@ export class WebSocketClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000; // Start with 1 second
-  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private reconnectTimeout: number | null = null;
   private messageHandlers: Set<WSMessageHandler> = new Set();
   private isIntentionallyClosed = false;
 
