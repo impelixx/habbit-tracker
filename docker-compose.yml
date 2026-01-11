@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: habbit-tracker-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: habbit
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - habbit-network
+
+  # Backend service (for local testing)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: habbit-tracker-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      ENVIRONMENT: development
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: habbit
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ALLOWED_ORIGINS: http://localhost:5173
+    depends_on:
+      - mongodb
+    networks:
+      - habbit-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  habbit-network:
+    driver: bridge
