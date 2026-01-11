@@ -66,7 +66,6 @@ func (h *RemindersHandler) SetReminder(c *fiber.Ctx) error {
 	}
 
 	// Validate time format (HH:MM)
-	var hour, min int
 	if _, err := time.Parse("15:04", req.Time); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, "Invalid time format. Use HH:MM (e.g., 09:00)")
 	}

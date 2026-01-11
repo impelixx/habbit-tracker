@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"sync"
 	"time"
@@ -57,9 +56,17 @@ func (h *WebSocketHandler) HandleConnection(c *websocket.Conn) {
 	}
 
 	// Validate token
-	userID, err := h.authService.ValidateJWT(token)
+	claims, err := h.authService.ValidateJWT(token)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid WebSocket token")
+		c.Close()
+		return
+	}
+
+	// Convert string UserID to ObjectID
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		log.Error().Err(err).Msg("Invalid user ID in token")
 		c.Close()
 		return
 	}
