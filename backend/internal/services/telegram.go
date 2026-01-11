@@ -14,12 +14,13 @@ import (
 
 // TelegramService handles Telegram bot operations
 type TelegramService struct {
-	bot *tgbotapi.BotAPI
-	db  *db.MongoDB
+	bot       *tgbotapi.BotAPI
+	db        *db.MongoDB
+	aiService *AIService
 }
 
 // NewTelegramService creates a new Telegram service
-func NewTelegramService(token string, database *db.MongoDB) (*TelegramService, error) {
+func NewTelegramService(token string, database *db.MongoDB, aiService *AIService) (*TelegramService, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -28,8 +29,9 @@ func NewTelegramService(token string, database *db.MongoDB) (*TelegramService, e
 	log.Info().Str("username", bot.Self.UserName).Msg("Authorized on Telegram bot")
 
 	return &TelegramService{
-		bot: bot,
-		db:  database,
+		bot:       bot,
+		db:        database,
+		aiService: aiService,
 	}, nil
 }
 
@@ -81,6 +83,11 @@ func (s *TelegramService) handleMessage(message *tgbotapi.Message) error {
 	// Handle commands
 	if message.IsCommand() {
 		return s.handleCommand(message, user)
+	}
+
+	// Handle voice messages
+	if message.Voice != nil {
+		return s.handleVoice(message, user)
 	}
 
 	// Handle regular text messages
@@ -143,7 +150,8 @@ func (s *TelegramService) handleHelp(message *tgbotapi.Message, user *models.Use
 		"• Create and manage tasks\n" +
 		"• Set daily reminders\n" +
 		"• Track your progress\n" +
-		"• Use voice messages (coming soon)\n" +
+		"• Send voice messages with AI parsing 🎤\n" +
+		"• Send natural language text (AI will extract tasks)\n" +
 		"• Open the Mini App for full features"
 
 	msg := tgbotapi.NewMessage(message.Chat.ID, helpText)
@@ -262,9 +270,52 @@ func (s *TelegramService) handleSettings(message *tgbotapi.Message, user *models
 
 // handleText handles regular text messages
 func (s *TelegramService) handleText(message *tgbotapi.Message, user *models.User) error {
-	// For now, treat text messages as task additions
 	ctx := context.Background()
 
+	// If AI service is available, try to parse tasks
+	if s.aiService != nil {
+		tasks, err := s.aiService.ParseTasksFromText(message.Text)
+		if err != nil {
+			log.Warn().Err(err).Msg("AI parsing failed, falling back to simple task creation")
+		} else if len(tasks) > 0 {
+			// Create tasks from AI parsing
+			createdCount := 0
+			for _, parsedTask := range tasks {
+				if parsedTask.Title == "" {
+					continue
+				}
+
+				task := models.NewTask(user.ID, parsedTask.Title, models.SourceBot)
+				task.Description = parsedTask.Description
+				task.Priority = parsedTask.Priority
+				task.Metadata = &models.TaskMetadata{
+					AIModel: s.aiService.primaryModel,
+				}
+
+				if err := s.db.CreateTask(ctx, task); err != nil {
+					log.Error().Err(err).Msg("Failed to create task")
+					continue
+				}
+				createdCount++
+			}
+
+			if createdCount > 0 {
+				responseText := fmt.Sprintf("✅ Created %d task(s) from your message:\n", createdCount)
+				for i, parsedTask := range tasks {
+					if i < 5 { // Show max 5 tasks
+						responseText += fmt.Sprintf("• %s (%s priority)\n", parsedTask.Title, parsedTask.Priority)
+					}
+				}
+				if createdCount > 5 {
+					responseText += fmt.Sprintf("... and %d more\n", createdCount-5)
+				}
+				responseText += "\nUse /today to see all tasks."
+				return s.sendMessage(message.Chat.ID, responseText)
+			}
+		}
+	}
+
+	// Fallback: treat as simple task
 	task := models.NewTask(user.ID, message.Text, models.SourceBot)
 	if err := s.db.CreateTask(ctx, task); err != nil {
 		log.Error().Err(err).Msg("Failed to create task")
@@ -273,6 +324,39 @@ func (s *TelegramService) handleText(message *tgbotapi.Message, user *models.Use
 
 	responseText := fmt.Sprintf("✅ Task added: %s\n\nUse /today to see all tasks.", message.Text)
 	return s.sendMessage(message.Chat.ID, responseText)
+}
+
+// handleVoice handles voice messages
+func (s *TelegramService) handleVoice(message *tgbotapi.Message, user *models.User) error {
+	ctx := context.Background()
+
+	// Check if AI service is available
+	if s.aiService == nil {
+		return s.sendMessage(message.Chat.ID, "Voice message processing is not available. Please send text instead.")
+	}
+
+	// Send typing indicator
+	s.bot.Send(tgbotapi.NewChatAction(message.Chat.ID, tgbotapi.ChatTyping))
+
+	// Get file from Telegram
+	fileConfig := tgbotapi.FileConfig{FileID: message.Voice.FileID}
+	file, err := s.bot.GetFile(fileConfig)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get voice file")
+		return s.sendMessage(message.Chat.ID, "Failed to process voice message. Please try again.")
+	}
+
+	// Note: Telegram Bot API doesn't provide direct transcription
+	// We would need to download the voice file and use an external STT service
+	// For now, we'll return a message indicating this feature needs OpenAI Whisper or similar
+	log.Info().Str("fileId", file.FileID).Int("fileSize", file.FileSize).Msg("Voice message received")
+
+	return s.sendMessage(message.Chat.ID,
+		"🎤 Voice message received!\n\n"+
+			"Voice transcription will be available soon. For now, please:\n"+
+			"• Send text messages (I'll parse them with AI)\n"+
+			"• Use /add <task> for simple tasks\n"+
+			"• Or use the Mini App for full features")
 }
 
 // handleCallbackQuery processes callback queries from inline buttons

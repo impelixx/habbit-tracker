@@ -41,9 +41,23 @@ func main() {
 	defer database.Close()
 	log.Info().Msg("Connected to MongoDB successfully")
 
+	// Initialize AI service (optional)
+	var aiService *services.AIService
+	if cfg.OpenRouterAPIKey != "" {
+		log.Info().Msg("Initializing AI service...")
+		aiService = services.NewAIService(
+			cfg.OpenRouterAPIKey,
+			cfg.OpenRouterLLMModel,
+			cfg.OpenRouterLLMFallback,
+		)
+		log.Info().Msg("AI service initialized")
+	} else {
+		log.Warn().Msg("OpenRouter API key not provided. AI features will be disabled.")
+	}
+
 	// Initialize Telegram service
 	log.Info().Msg("Initializing Telegram bot...")
-	telegramService, err := services.NewTelegramService(cfg.TelegramBotToken, database)
+	telegramService, err := services.NewTelegramService(cfg.TelegramBotToken, database, aiService)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize Telegram service")
 	}
