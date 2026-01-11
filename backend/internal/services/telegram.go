@@ -14,9 +14,10 @@ import (
 
 // TelegramService handles Telegram bot operations
 type TelegramService struct {
-	bot       *tgbotapi.BotAPI
-	db        *db.MongoDB
-	aiService *AIService
+	bot         *tgbotapi.BotAPI
+	db          *db.MongoDB
+	aiService   *AIService
+	broadcaster models.TaskBroadcaster
 }
 
 // NewTelegramService creates a new Telegram service
@@ -33,6 +34,11 @@ func NewTelegramService(token string, database *db.MongoDB, aiService *AIService
 		db:        database,
 		aiService: aiService,
 	}, nil
+}
+
+// SetBroadcaster sets the task broadcaster for real-time updates
+func (s *TelegramService) SetBroadcaster(broadcaster models.TaskBroadcaster) {
+	s.broadcaster = broadcaster
 }
 
 // GetBot returns the bot instance
@@ -177,6 +183,11 @@ func (s *TelegramService) handleAdd(message *tgbotapi.Message, user *models.User
 		return s.sendMessage(message.Chat.ID, "Failed to create task. Please try again.")
 	}
 
+	// Broadcast task creation to WebSocket clients
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastTaskUpdate(task, "created")
+	}
+
 	responseText := fmt.Sprintf("✅ Task added: %s", taskText)
 	return s.sendMessage(message.Chat.ID, responseText)
 }
@@ -296,6 +307,12 @@ func (s *TelegramService) handleText(message *tgbotapi.Message, user *models.Use
 					log.Error().Err(err).Msg("Failed to create task")
 					continue
 				}
+
+				// Broadcast task creation to WebSocket clients
+				if s.broadcaster != nil {
+					s.broadcaster.BroadcastTaskUpdate(task, "created")
+				}
+
 				createdCount++
 			}
 
@@ -320,6 +337,11 @@ func (s *TelegramService) handleText(message *tgbotapi.Message, user *models.Use
 	if err := s.db.CreateTask(ctx, task); err != nil {
 		log.Error().Err(err).Msg("Failed to create task")
 		return s.sendMessage(message.Chat.ID, "Failed to create task. Please try again.")
+	}
+
+	// Broadcast task creation to WebSocket clients
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastTaskUpdate(task, "created")
 	}
 
 	responseText := fmt.Sprintf("✅ Task added: %s\n\nUse /today to see all tasks.", message.Text)
@@ -391,6 +413,11 @@ func (s *TelegramService) handleCallbackQuery(query *tgbotapi.CallbackQuery) err
 	if err := s.db.UpdateTask(ctx, task); err != nil {
 		log.Error().Err(err).Msg("Failed to update task")
 		return s.answerCallbackQuery(query.ID, "Failed to complete task")
+	}
+
+	// Broadcast task update to WebSocket clients
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastTaskUpdate(task, "updated")
 	}
 
 	// Update message

@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/websocket/v2"
 	"github.com/impelixx/habbit-tracker/backend/internal/config"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/handlers"
@@ -103,7 +104,13 @@ func main() {
 	// Initialize handlers
 	webhookHandler := handlers.NewWebhookHandler(telegramService)
 	authHandler := handlers.NewAuthHandler(authService, database)
-	tasksHandler := handlers.NewTasksHandler(database)
+	wsHandler := handlers.NewWebSocketHandler(database, authService)
+	tasksHandler := handlers.NewTasksHandler(database, wsHandler)
+	remindersHandler := handlers.NewRemindersHandler(database)
+	statsHandler := handlers.NewStatsHandler(database)
+
+	// Set broadcaster for telegram service to enable WebSocket updates
+	telegramService.SetBroadcaster(wsHandler)
 
 	// Routes
 	api := app.Group("/api")
@@ -122,10 +129,25 @@ func main() {
 	protected.Patch("/tasks/:id", tasksHandler.UpdateTask)
 	protected.Delete("/tasks/:id", tasksHandler.DeleteTask)
 
-	// TODO: Add more routes
-	// - /api/stats
-	// - /api/reminders
-	// - /api/ws (WebSocket)
+	// Statistics
+	protected.Get("/stats", statsHandler.GetStats)
+
+	// Reminders
+	protected.Get("/reminders", remindersHandler.GetReminder)
+	protected.Post("/reminders/set", remindersHandler.SetReminder)
+	protected.Delete("/reminders", remindersHandler.DeleteReminder)
+
+	// WebSocket route
+	api.Use("/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+	api.Get("/ws", websocket.New(func(c *websocket.Conn) {
+		wsHandler.HandleConnection(c)
+	}))
 
 	// Start server in a goroutine
 	go func() {
