@@ -13,6 +13,7 @@ import (
 	"github.com/impelixx/habbit-tracker/backend/internal/config"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/handlers"
+	"github.com/impelixx/habbit-tracker/backend/internal/middleware"
 	"github.com/impelixx/habbit-tracker/backend/internal/services"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -82,8 +83,13 @@ func main() {
 		return c.SendString("OK")
 	})
 
+	// Initialize services
+	authService := services.NewAuthService(cfg.JWTSecret, cfg.JWTExpiration, cfg.TelegramBotToken)
+
 	// Initialize handlers
 	webhookHandler := handlers.NewWebhookHandler(telegramService)
+	authHandler := handlers.NewAuthHandler(authService, database)
+	tasksHandler := handlers.NewTasksHandler(database)
 
 	// Routes
 	api := app.Group("/api")
@@ -91,9 +97,18 @@ func main() {
 	// Telegram webhook
 	api.Post("/webhook/telegram", webhookHandler.HandleWebhook)
 
-	// TODO: Add more routes for REST API
-	// - /api/auth/verify
-	// - /api/tasks
+	// Auth routes (no auth required)
+	api.Post("/auth/verify", authHandler.Verify)
+
+	// Protected routes (require JWT auth)
+	protected := api.Group("", middleware.AuthMiddleware(authService))
+	protected.Get("/auth/me", authHandler.GetMe)
+	protected.Get("/tasks", tasksHandler.GetTasks)
+	protected.Post("/tasks", tasksHandler.CreateTask)
+	protected.Patch("/tasks/:id", tasksHandler.UpdateTask)
+	protected.Delete("/tasks/:id", tasksHandler.DeleteTask)
+
+	// TODO: Add more routes
 	// - /api/stats
 	// - /api/reminders
 	// - /api/ws (WebSocket)
