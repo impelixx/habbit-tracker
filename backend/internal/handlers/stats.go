@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -39,10 +40,10 @@ type StatsResponse struct {
 
 // WeekStats represents weekly statistics
 type WeekStats struct {
-	DaysWithTasks     int `json:"daysWithTasks"`
-	DaysCompleted     int `json:"daysCompleted"`
-	TotalTasks        int `json:"totalTasks"`
-	CompletedTasks    int `json:"completedTasks"`
+	DaysWithTasks  int `json:"daysWithTasks"`
+	DaysCompleted  int `json:"daysCompleted"`
+	TotalTasks     int `json:"totalTasks"`
+	CompletedTasks int `json:"completedTasks"`
 }
 
 // GetStats handles GET /api/stats
@@ -188,14 +189,8 @@ func (h *StatsHandler) calculateStreak(tasks []*models.Task) (int, int) {
 		dates = append(dates, date)
 	}
 
-	// Sort dates (simple bubble sort for small dataset)
-	for i := 0; i < len(dates); i++ {
-		for j := i + 1; j < len(dates); j++ {
-			if dates[i] > dates[j] {
-				dates[i], dates[j] = dates[j], dates[i]
-			}
-		}
-	}
+	// Sort dates using Go's built-in sort for better performance
+	sort.Strings(dates)
 
 	// Calculate longest streak from all dates
 	tempStreak = 0
