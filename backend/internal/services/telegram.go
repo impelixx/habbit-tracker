@@ -8,6 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"github.com/impelixx/habbit-tracker/backend/internal/utils"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -240,8 +241,11 @@ func (s *TelegramService) handleDone(message *tgbotapi.Message, user *models.Use
 	// Create inline keyboard with tasks
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 	for i, task := range incompleteTasks {
+		// Truncate task title to fit Telegram button text limit (max 64 chars)
+		// Reserve space for number prefix (e.g., "10. ") and safety margin
+		truncatedTitle := utils.TruncateText(task.Title, 35)
 		button := tgbotapi.NewInlineKeyboardButtonData(
-			fmt.Sprintf("%d. %s", i+1, task.Title),
+			fmt.Sprintf("%d. %s", i+1, truncatedTitle),
 			fmt.Sprintf("complete:%s", task.ID.Hex()),
 		)
 		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})

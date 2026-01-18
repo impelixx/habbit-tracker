@@ -8,23 +8,24 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"github.com/impelixx/habbit-tracker/backend/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
 // SchedulerService handles background reminder scheduling
 type SchedulerService struct {
-	db           *db.MongoDB
-	bot          *tgbotapi.BotAPI
-	stopChan     chan struct{}
+	db            *db.MongoDB
+	bot           *tgbotapi.BotAPI
+	stopChan      chan struct{}
 	checkInterval time.Duration
 }
 
 // NewSchedulerService creates a new scheduler service
 func NewSchedulerService(database *db.MongoDB, bot *tgbotapi.BotAPI) *SchedulerService {
 	return &SchedulerService{
-		db:           database,
-		bot:          bot,
-		stopChan:     make(chan struct{}),
+		db:            database,
+		bot:           bot,
+		stopChan:      make(chan struct{}),
 		checkInterval: 1 * time.Minute, // Check every minute
 	}
 }
@@ -240,8 +241,11 @@ func (s *SchedulerService) buildReminderKeyboard(tasks []*models.Task) [][]tgbot
 	count := 0
 	for _, task := range tasks {
 		if !task.Completed && count < 3 {
+			// Truncate task title to fit Telegram button text limit (max 64 chars)
+			// Reserve space for "✓ " prefix (2 chars) and safety margin
+			truncatedTitle := utils.TruncateText(task.Title, 35)
 			button := tgbotapi.NewInlineKeyboardButtonData(
-				fmt.Sprintf("✓ %s", task.Title),
+				fmt.Sprintf("✓ %s", truncatedTitle),
 				fmt.Sprintf("complete:%s", task.ID.Hex()),
 			)
 			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
