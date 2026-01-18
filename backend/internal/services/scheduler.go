@@ -99,6 +99,15 @@ func (s *SchedulerService) checkAndSendReminders() error {
 					Err(err).
 					Str("userId", reminder.UserID.Hex()).
 					Msg("Failed to send reminder")
+				
+				// Revert the lastSent update so the reminder can be retried
+				// The reminder variable still holds the original lastSent value
+				if revertErr := s.db.UpdateReminder(ctx, reminder); revertErr != nil {
+					log.Error().
+						Err(revertErr).
+						Str("userId", reminder.UserID.Hex()).
+						Msg("Failed to revert lastSent after send failure")
+				}
 				continue
 			}
 			sentCount++

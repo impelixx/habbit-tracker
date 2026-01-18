@@ -310,7 +310,7 @@ func (db *MongoDB) AtomicUpdateReminderLastSent(ctx context.Context, reminderID 
 	}
 	
 	// Match the current lastSent value (whether nil or a specific time)
-	// This works for both null and actual time values in MongoDB
+	// MongoDB handles nil comparison correctly, matching null values in the database
 	filter["lastSent"] = lastSent
 	
 	update := bson.M{
