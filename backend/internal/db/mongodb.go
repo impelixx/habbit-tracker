@@ -299,8 +299,8 @@ func (db *MongoDB) GetEnabledReminders(ctx context.Context) ([]*models.Reminder,
 }
 
 // AtomicUpdateReminderLastSent atomically updates the lastSent field only if it hasn't been updated
-// for the current day in the user's timezone. Returns true if the update was successful (reminder was sent),
-// false if another instance already updated it (reminder was already sent today).
+// since it was read. Returns true if the update was successful (this instance should send the reminder),
+// false if another instance already updated it (another instance is handling the reminder).
 func (db *MongoDB) AtomicUpdateReminderLastSent(ctx context.Context, reminderID primitive.ObjectID, lastSent *time.Time, newLastSent time.Time) (bool, error) {
 	collection := db.database.Collection("reminders")
 	
@@ -309,13 +309,9 @@ func (db *MongoDB) AtomicUpdateReminderLastSent(ctx context.Context, reminderID 
 		"_id": reminderID,
 	}
 	
-	// If lastSent is nil, only update if it's still nil
-	// If lastSent is not nil, only update if it matches the current value
-	if lastSent == nil {
-		filter["lastSent"] = bson.M{"$exists": false}
-	} else {
-		filter["lastSent"] = lastSent
-	}
+	// Match the current lastSent value (whether nil or a specific time)
+	// This works for both null and actual time values in MongoDB
+	filter["lastSent"] = lastSent
 	
 	update := bson.M{
 		"$set": bson.M{
