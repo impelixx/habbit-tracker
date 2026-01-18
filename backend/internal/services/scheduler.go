@@ -13,18 +13,18 @@ import (
 
 // SchedulerService handles background reminder scheduling
 type SchedulerService struct {
-	db           *db.MongoDB
-	bot          *tgbotapi.BotAPI
-	stopChan     chan struct{}
+	db            *db.MongoDB
+	bot           *tgbotapi.BotAPI
+	stopChan      chan struct{}
 	checkInterval time.Duration
 }
 
 // NewSchedulerService creates a new scheduler service
 func NewSchedulerService(database *db.MongoDB, bot *tgbotapi.BotAPI) *SchedulerService {
 	return &SchedulerService{
-		db:           database,
-		bot:          bot,
-		stopChan:     make(chan struct{}),
+		db:            database,
+		bot:           bot,
+		stopChan:      make(chan struct{}),
 		checkInterval: 1 * time.Minute, // Check every minute
 	}
 }
@@ -232,6 +232,14 @@ func (s *SchedulerService) buildReminderMessage(user *models.User, tasks []*mode
 	return message
 }
 
+// truncateText truncates text to maxLength and adds ellipsis if needed
+func truncateText(text string, maxLength int) string {
+	if len(text) <= maxLength {
+		return text
+	}
+	return text[:maxLength-3] + "..."
+}
+
 // buildReminderKeyboard creates inline keyboard for quick actions
 func (s *SchedulerService) buildReminderKeyboard(tasks []*models.Task) [][]tgbotapi.InlineKeyboardButton {
 	var keyboard [][]tgbotapi.InlineKeyboardButton
@@ -240,8 +248,11 @@ func (s *SchedulerService) buildReminderKeyboard(tasks []*models.Task) [][]tgbot
 	count := 0
 	for _, task := range tasks {
 		if !task.Completed && count < 3 {
+			// Truncate task title to fit Telegram button text limit (max 64 chars)
+			// Reserve space for "✓ " prefix (2 chars) and safety margin
+			truncatedTitle := truncateText(task.Title, 35)
 			button := tgbotapi.NewInlineKeyboardButtonData(
-				fmt.Sprintf("✓ %s", task.Title),
+				fmt.Sprintf("✓ %s", truncatedTitle),
 				fmt.Sprintf("complete:%s", task.ID.Hex()),
 			)
 			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})

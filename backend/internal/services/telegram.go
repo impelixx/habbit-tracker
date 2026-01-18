@@ -69,6 +69,14 @@ func (s *TelegramService) HandleUpdate(update tgbotapi.Update) error {
 	return nil
 }
 
+// truncateText truncates text to maxLength and adds ellipsis if needed
+func truncateText(text string, maxLength int) string {
+	if len(text) <= maxLength {
+		return text
+	}
+	return text[:maxLength-3] + "..."
+}
+
 // handleMessage processes incoming messages
 func (s *TelegramService) handleMessage(message *tgbotapi.Message) error {
 	ctx := context.Background()
@@ -240,8 +248,11 @@ func (s *TelegramService) handleDone(message *tgbotapi.Message, user *models.Use
 	// Create inline keyboard with tasks
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 	for i, task := range incompleteTasks {
+		// Truncate task title to fit Telegram button text limit (max 64 chars)
+		// Reserve space for number prefix (e.g., "10. ") and safety margin
+		truncatedTitle := truncateText(task.Title, 35)
 		button := tgbotapi.NewInlineKeyboardButtonData(
-			fmt.Sprintf("%d. %s", i+1, task.Title),
+			fmt.Sprintf("%d. %s", i+1, truncatedTitle),
 			fmt.Sprintf("complete:%s", task.ID.Hex()),
 		)
 		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
