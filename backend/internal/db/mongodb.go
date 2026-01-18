@@ -328,3 +328,18 @@ func (db *MongoDB) AtomicUpdateReminderLastSent(ctx context.Context, reminderID 
 	// If modified count is 0, it means another instance already updated it
 	return result.ModifiedCount > 0, nil
 }
+
+// UpdateReminderLastSent updates only the lastSent field of a reminder
+func (db *MongoDB) UpdateReminderLastSent(ctx context.Context, reminderID primitive.ObjectID, lastSent *time.Time) error {
+	collection := db.database.Collection("reminders")
+	
+	update := bson.M{
+		"$set": bson.M{
+			"lastSent":  lastSent,
+			"updatedAt": time.Now(),
+		},
+	}
+	
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": reminderID}, update)
+	return err
+}
