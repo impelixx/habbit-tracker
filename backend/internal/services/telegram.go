@@ -328,8 +328,6 @@ func (s *TelegramService) handleText(message *tgbotapi.Message, user *models.Use
 
 // handleVoice handles voice messages
 func (s *TelegramService) handleVoice(message *tgbotapi.Message, user *models.User) error {
-	ctx := context.Background()
-
 	// Check if AI service is available
 	if s.aiService == nil {
 		return s.sendMessage(message.Chat.ID, "Voice message processing is not available. Please send text instead.")
