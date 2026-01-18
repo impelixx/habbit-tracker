@@ -202,8 +202,8 @@ func (h *StatsHandler) calculateStreak(tasks []*models.Task) (int, int) {
 			prevDate, _ := time.Parse("2006-01-02", dates[i-1])
 			currDate, _ := time.Parse("2006-01-02", date)
 			// Check if gap is more than 1 day (24 hours)
-			daysDiff := currDate.Sub(prevDate).Hours() / 24
-			if daysDiff > 1 {
+			// Using time.Duration comparison for accuracy
+			if currDate.Sub(prevDate) > 24*time.Hour {
 				// Gap detected, reset streak
 				tempStreak = 0
 			}
