@@ -487,7 +487,7 @@ func (s *TelegramService) handleSettingsCallback(ctx context.Context, query *tgb
 		return s.answerCallbackQuery(query.ID, "Reminders disabled")
 
 	case "time":
-		s.sendMessage(query.Message.Chat.ID,
+		s.sendMarkdownMessage(query.Message.Chat.ID,
 			"⏰ *Set Reminder Time*\n\n"+
 				"To set a custom reminder time, use the Mini App.\n\n"+
 				"Default times:\n"+
@@ -597,6 +597,14 @@ func (s *TelegramService) getOrCreateUser(ctx context.Context, from *tgbotapi.Us
 // sendMessage sends a text message to a chat
 func (s *TelegramService) sendMessage(chatID int64, text string) error {
 	msg := tgbotapi.NewMessage(chatID, text)
+	_, err := s.bot.Send(msg)
+	return err
+}
+
+// sendMarkdownMessage sends a text message with Markdown formatting to a chat
+func (s *TelegramService) sendMarkdownMessage(chatID int64, text string) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
 	_, err := s.bot.Send(msg)
 	return err
 }
