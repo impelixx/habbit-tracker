@@ -516,7 +516,10 @@ func (s *TelegramService) handleCommandCallback(ctx context.Context, query *tgbo
 
 	switch command {
 	case "today":
-		s.handleToday(fakeMsg, user)
+		if err := s.handleToday(fakeMsg, user); err != nil {
+			log.Error().Err(err).Msg("failed to handle 'today' command from callback")
+			return s.answerCallbackQuery(query.ID, "Failed to send today's tasks")
+		}
 		return s.answerCallbackQuery(query.ID, "")
 	}
 
