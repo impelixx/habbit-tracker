@@ -75,20 +75,44 @@ func (s *SchedulerService) checkAndSendReminders() error {
 	for _, reminder := range reminders {
 		// Check if it's time to send reminder
 		if s.shouldSendReminder(reminder, now) {
+			// Atomically update the lastSent field to prevent race conditions
+			// This ensures only one scheduler instance sends the reminder
+			updated, err := s.db.AtomicUpdateReminderLastSent(ctx, reminder.ID, reminder.LastSent, now)
+			if err != nil {
+				log.Error().
+					Err(err).
+					Str("userId", reminder.UserID.Hex()).
+					Msg("Failed to atomically update reminder last sent time")
+				continue
+			}
+			
+			// If update failed, another instance already sent the reminder
+			if !updated {
+				log.Debug().
+					Str("userId", reminder.UserID.Hex()).
+					Msg("Reminder already sent by another instance")
+				continue
+			}
+			
+			// Only send if we successfully updated the lastSent field
 			if err := s.sendReminder(ctx, reminder); err != nil {
 				log.Error().
 					Err(err).
 					Str("userId", reminder.UserID.Hex()).
 					Msg("Failed to send reminder")
+				
+				// Revert the lastSent update so the reminder can be retried in the next scheduler run
+				// Note: This revert could fail if another instance updated the reminder after our atomic update,
+				// but that's acceptable as the reminder will be retried in the next scheduler run
+				if revertErr := s.db.UpdateReminderLastSent(ctx, reminder.ID, reminder.LastSent); revertErr != nil {
+					log.Warn().
+						Err(revertErr).
+						Str("userId", reminder.UserID.Hex()).
+						Msg("Failed to revert lastSent after send failure - reminder will retry in next run")
+				}
 				continue
 			}
 			sentCount++
-
-			// Update last sent time
-			reminder.LastSent = &now
-			if err := s.db.UpdateReminder(ctx, reminder); err != nil {
-				log.Error().Err(err).Msg("Failed to update reminder last sent time")
-			}
 		}
 	}
 
