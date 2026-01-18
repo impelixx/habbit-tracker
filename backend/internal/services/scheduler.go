@@ -8,6 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"github.com/impelixx/habbit-tracker/backend/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -232,14 +233,6 @@ func (s *SchedulerService) buildReminderMessage(user *models.User, tasks []*mode
 	return message
 }
 
-// truncateText truncates text to maxLength and adds ellipsis if needed
-func truncateText(text string, maxLength int) string {
-	if len(text) <= maxLength {
-		return text
-	}
-	return text[:maxLength-3] + "..."
-}
-
 // buildReminderKeyboard creates inline keyboard for quick actions
 func (s *SchedulerService) buildReminderKeyboard(tasks []*models.Task) [][]tgbotapi.InlineKeyboardButton {
 	var keyboard [][]tgbotapi.InlineKeyboardButton
@@ -250,7 +243,7 @@ func (s *SchedulerService) buildReminderKeyboard(tasks []*models.Task) [][]tgbot
 		if !task.Completed && count < 3 {
 			// Truncate task title to fit Telegram button text limit (max 64 chars)
 			// Reserve space for "✓ " prefix (2 chars) and safety margin
-			truncatedTitle := truncateText(task.Title, 35)
+			truncatedTitle := utils.TruncateText(task.Title, 35)
 			button := tgbotapi.NewInlineKeyboardButtonData(
 				fmt.Sprintf("✓ %s", truncatedTitle),
 				fmt.Sprintf("complete:%s", task.ID.Hex()),
