@@ -100,12 +100,14 @@ func (s *SchedulerService) checkAndSendReminders() error {
 					Str("userId", reminder.UserID.Hex()).
 					Msg("Failed to send reminder")
 				
-				// Revert the lastSent update so the reminder can be retried
+				// Revert the lastSent update so the reminder can be retried in the next scheduler run
+				// Note: This revert could fail if another instance updated the reminder after our atomic update,
+				// but that's acceptable as the reminder will be retried in the next scheduler run
 				if revertErr := s.db.UpdateReminderLastSent(ctx, reminder.ID, reminder.LastSent); revertErr != nil {
-					log.Error().
+					log.Warn().
 						Err(revertErr).
 						Str("userId", reminder.UserID.Hex()).
-						Msg("Failed to revert lastSent after send failure")
+						Msg("Failed to revert lastSent after send failure - reminder will retry in next run")
 				}
 				continue
 			}

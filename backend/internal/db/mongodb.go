@@ -299,7 +299,24 @@ func (db *MongoDB) GetEnabledReminders(ctx context.Context) ([]*models.Reminder,
 }
 
 // AtomicUpdateReminderLastSent atomically updates the lastSent field only if it hasn't been updated
-// since it was read. Returns true if the update was successful (this instance should send the reminder),
+// since it was read. This prevents race conditions when multiple scheduler instances run concurrently.
+//
+// Race condition scenario:
+// - Instance A reads reminder with lastSent = nil at 9:00:00
+// - Instance B reads the same reminder with lastSent = nil at 9:00:01
+// - Both instances check shouldSendReminder and both decide to send
+// - Without atomic update, both would send duplicate reminders
+//
+// With atomic update:
+// - Instance A atomically updates if lastSent still equals nil (succeeds)
+// - Instance B atomically updates if lastSent still equals nil (fails, as A already updated it)
+// - Only Instance A proceeds to send the reminder
+//
+// Examples:
+// - If lastSent is nil, matches documents where lastSent is null or missing
+// - If lastSent is a time value, matches only documents with that exact time value
+//
+// Returns true if the update was successful (this instance should send the reminder),
 // false if another instance already updated it (another instance is handling the reminder).
 func (db *MongoDB) AtomicUpdateReminderLastSent(ctx context.Context, reminderID primitive.ObjectID, lastSent *time.Time, newLastSent time.Time) (bool, error) {
 	collection := db.database.Collection("reminders")
@@ -310,7 +327,8 @@ func (db *MongoDB) AtomicUpdateReminderLastSent(ctx context.Context, reminderID 
 	}
 	
 	// Match the current lastSent value (whether nil or a specific time)
-	// MongoDB handles nil comparison correctly, matching null values in the database
+	// When lastSent is nil, MongoDB matches documents where the field is null or missing
+	// When lastSent is a time value, MongoDB matches documents with that exact time
 	filter["lastSent"] = lastSent
 	
 	update := bson.M{
