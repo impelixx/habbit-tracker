@@ -8,6 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"github.com/impelixx/habbit-tracker/backend/internal/utils"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -251,8 +252,11 @@ func (s *TelegramService) handleDone(message *tgbotapi.Message, user *models.Use
 	// Create inline keyboard with tasks
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 	for i, task := range incompleteTasks {
+		// Truncate task title to fit Telegram button text limit (max 64 chars)
+		// Reserve space for number prefix (e.g., "10. ") and safety margin
+		truncatedTitle := utils.TruncateText(task.Title, 35)
 		button := tgbotapi.NewInlineKeyboardButtonData(
-			fmt.Sprintf("%d. %s", i+1, task.Title),
+			fmt.Sprintf("%d. %s", i+1, truncatedTitle),
 			fmt.Sprintf("complete:%s", task.ID.Hex()),
 		)
 		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
@@ -510,7 +514,7 @@ func (s *TelegramService) handleSettingsCallback(ctx context.Context, query *tgb
 		return s.answerCallbackQuery(query.ID, "Reminders disabled")
 
 	case "time":
-		s.sendMessage(query.Message.Chat.ID,
+		s.sendMarkdownMessage(query.Message.Chat.ID,
 			"⏰ *Set Reminder Time*\n\n"+
 				"To set a custom reminder time, use the Mini App.\n\n"+
 				"Default times:\n"+
@@ -541,7 +545,10 @@ func (s *TelegramService) handleCommandCallback(ctx context.Context, query *tgbo
 
 	switch command {
 	case "today":
-		s.handleToday(fakeMsg, user)
+		if err := s.handleToday(fakeMsg, user); err != nil {
+			log.Error().Err(err).Msg("failed to handle 'today' command from callback")
+			return s.answerCallbackQuery(query.ID, "Failed to send today's tasks")
+		}
 		return s.answerCallbackQuery(query.ID, "")
 	}
 
@@ -617,6 +624,14 @@ func (s *TelegramService) getOrCreateUser(ctx context.Context, from *tgbotapi.Us
 // sendMessage sends a text message to a chat
 func (s *TelegramService) sendMessage(chatID int64, text string) error {
 	msg := tgbotapi.NewMessage(chatID, text)
+	_, err := s.bot.Send(msg)
+	return err
+}
+
+// sendMarkdownMessage sends a text message with Markdown formatting to a chat
+func (s *TelegramService) sendMarkdownMessage(chatID int64, text string) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
 	_, err := s.bot.Send(msg)
 	return err
 }
