@@ -22,7 +22,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'completed'>('all');
 
   const handleCreateTask = async (taskData: CreateTaskRequest) => {
-    const success = await createTask({ ...taskData, source: 'webapp' } as any);
+    const success = await createTask(taskData);
     if (success) {
       setShowForm(false);
       hapticFeedback.notification('success');
