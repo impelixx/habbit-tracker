@@ -89,5 +89,5 @@ export interface ApiResponse<T> {
 // WebSocket message types
 export interface WebSocketMessage {
   type: 'task_created' | 'task_updated' | 'task_deleted' | 'ping' | 'pong';
-  payload?: any;
+  payload?: unknown;
 }

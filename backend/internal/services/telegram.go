@@ -8,6 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"github.com/impelixx/habbit-tracker/backend/internal/utils"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -251,8 +252,11 @@ func (s *TelegramService) handleDone(message *tgbotapi.Message, user *models.Use
 	// Create inline keyboard with tasks
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 	for i, task := range incompleteTasks {
+		// Truncate task title to fit Telegram button text limit (max 64 chars)
+		// Reserve space for number prefix (e.g., "10. ") and safety margin
+		truncatedTitle := utils.TruncateText(task.Title, 35)
 		button := tgbotapi.NewInlineKeyboardButtonData(
-			fmt.Sprintf("%d. %s", i+1, task.Title),
+			fmt.Sprintf("%d. %s", i+1, truncatedTitle),
 			fmt.Sprintf("complete:%s", task.ID.Hex()),
 		)
 		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
@@ -266,16 +270,60 @@ func (s *TelegramService) handleDone(message *tgbotapi.Message, user *models.Use
 
 // handleSettings handles the /settings command
 func (s *TelegramService) handleSettings(message *tgbotapi.Message, user *models.User) error {
-	settingsText := "⚙️ *Settings*\n\n" +
-		"Use the Mini App to configure:\n" +
-		"• Reminder time\n" +
-		"• Timezone\n" +
-		"• Theme preferences\n\n" +
-		"(Settings UI coming soon in bot)"
+	ctx := context.Background()
+
+	// Get current reminder settings
+	reminder, err := s.db.GetReminderByUserID(ctx, user.ID)
+
+	settingsText := "⚙️ *Settings*\n\n"
+
+	if err != nil || reminder == nil {
+		settingsText += "📍 *Current Status:*\n"
+		settingsText += "• Daily reminders: ❌ Disabled\n\n"
+		settingsText += "Use the buttons below to set up reminders:\n"
+	} else {
+		statusEmoji := "✅"
+		if !reminder.Enabled {
+			statusEmoji = "❌"
+		}
+		settingsText += "📍 *Current Status:*\n"
+		settingsText += fmt.Sprintf("• Daily reminders: %s %s\n", statusEmoji,
+			map[bool]string{true: "Enabled", false: "Disabled"}[reminder.Enabled])
+		settingsText += fmt.Sprintf("• Time: %s\n", reminder.Time)
+		settingsText += fmt.Sprintf("• Timezone: %s\n\n", reminder.Timezone)
+	}
+
+	settingsText += "💡 *Available Options:*\n"
+	settingsText += "• Set reminder time\n"
+	settingsText += "• Enable/disable reminders\n"
+	settingsText += "• View statistics\n\n"
+	settingsText += "Use the Mini App for full settings control!"
+
+	// Create inline keyboard
+	var keyboard [][]tgbotapi.InlineKeyboardButton
+
+	if reminder == nil || !reminder.Enabled {
+		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData("🔔 Enable Reminders", "settings:enable"),
+		})
+	} else {
+		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData("🔕 Disable Reminders", "settings:disable"),
+		})
+	}
+
+	keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("⏰ Set Time", "settings:time"),
+	})
+
+	keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("📊 View Stats", "settings:stats"),
+	})
 
 	msg := tgbotapi.NewMessage(message.Chat.ID, settingsText)
 	msg.ParseMode = "Markdown"
-	_, err := s.bot.Send(msg)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(keyboard...)
+	_, err = s.bot.Send(msg)
 	return err
 }
 
@@ -383,15 +431,23 @@ func (s *TelegramService) handleVoice(message *tgbotapi.Message, user *models.Us
 func (s *TelegramService) handleCallbackQuery(query *tgbotapi.CallbackQuery) error {
 	ctx := context.Background()
 
-	// Parse callback data
-	// Format: "complete:<taskID>"
-	var taskIDHex string
-	fmt.Sscanf(query.Data, "complete:%s", &taskIDHex)
+	// Determine callback type
+	data := query.Data
 
-	if taskIDHex == "" {
-		return s.answerCallbackQuery(query.ID, "Invalid task ID")
+	// Handle different callback types
+	if len(data) > 9 && data[:9] == "complete:" {
+		return s.handleCompleteCallback(ctx, query, data[9:])
+	} else if len(data) > 9 && data[:9] == "settings:" {
+		return s.handleSettingsCallback(ctx, query, data[9:])
+	} else if len(data) > 4 && data[:4] == "cmd:" {
+		return s.handleCommandCallback(ctx, query, data[4:])
 	}
 
+	return s.answerCallbackQuery(query.ID, "Unknown action")
+}
+
+// handleCompleteCallback handles task completion callbacks
+func (s *TelegramService) handleCompleteCallback(ctx context.Context, query *tgbotapi.CallbackQuery, taskIDHex string) error {
 	// Get task
 	taskID, err := models.ParseObjectID(taskIDHex)
 	if err != nil {
@@ -429,6 +485,113 @@ func (s *TelegramService) handleCallbackQuery(query *tgbotapi.CallbackQuery) err
 	return s.answerCallbackQuery(query.ID, "Task completed!")
 }
 
+// handleSettingsCallback handles settings callbacks
+func (s *TelegramService) handleSettingsCallback(ctx context.Context, query *tgbotapi.CallbackQuery, action string) error {
+	// Get user from query
+	user, err := s.db.GetUserByTelegramID(ctx, query.From.ID)
+	if err != nil {
+		return s.answerCallbackQuery(query.ID, "User not found")
+	}
+
+	switch action {
+	case "enable":
+		// Enable reminders with default time
+		reminder := models.NewReminder(user.ID, "09:00", user.Timezone)
+		reminder.Enabled = true
+		if err := s.db.UpsertReminder(ctx, reminder); err != nil {
+			return s.answerCallbackQuery(query.ID, "Failed to enable reminders")
+		}
+		s.sendMessage(query.Message.Chat.ID, "✅ Daily reminders enabled at 09:00!\n\nUse /settings to change the time.")
+		return s.answerCallbackQuery(query.ID, "Reminders enabled!")
+
+	case "disable":
+		reminder, err := s.db.GetReminderByUserID(ctx, user.ID)
+		if err == nil {
+			reminder.Enabled = false
+			s.db.UpdateReminder(ctx, reminder)
+		}
+		s.sendMessage(query.Message.Chat.ID, "🔕 Daily reminders disabled.")
+		return s.answerCallbackQuery(query.ID, "Reminders disabled")
+
+	case "time":
+		s.sendMarkdownMessage(query.Message.Chat.ID,
+			"⏰ *Set Reminder Time*\n\n"+
+				"To set a custom reminder time, use the Mini App.\n\n"+
+				"Default times:\n"+
+				"• Morning: 09:00\n"+
+				"• Afternoon: 14:00\n"+
+				"• Evening: 19:00")
+		return s.answerCallbackQuery(query.ID, "")
+
+	case "stats":
+		return s.handleStatsCallback(ctx, query, user)
+	}
+
+	return s.answerCallbackQuery(query.ID, "Unknown setting")
+}
+
+// handleCommandCallback handles command callbacks
+func (s *TelegramService) handleCommandCallback(ctx context.Context, query *tgbotapi.CallbackQuery, command string) error {
+	user, err := s.db.GetUserByTelegramID(ctx, query.From.ID)
+	if err != nil {
+		return s.answerCallbackQuery(query.ID, "User not found")
+	}
+
+	// Create a fake message to reuse command handlers
+	fakeMsg := &tgbotapi.Message{
+		From: query.From,
+		Chat: query.Message.Chat,
+	}
+
+	switch command {
+	case "today":
+		if err := s.handleToday(fakeMsg, user); err != nil {
+			log.Error().Err(err).Msg("failed to handle 'today' command from callback")
+			return s.answerCallbackQuery(query.ID, "Failed to send today's tasks")
+		}
+		return s.answerCallbackQuery(query.ID, "")
+	}
+
+	return s.answerCallbackQuery(query.ID, "Unknown command")
+}
+
+// handleStatsCallback handles stats display callback
+func (s *TelegramService) handleStatsCallback(ctx context.Context, query *tgbotapi.CallbackQuery, user *models.User) error {
+	// Get all user tasks
+	tasks, err := s.db.GetTasksByUserID(ctx, user.ID)
+	if err != nil {
+		return s.answerCallbackQuery(query.ID, "Failed to get stats")
+	}
+
+	completed := 0
+	for _, task := range tasks {
+		if task.Completed {
+			completed++
+		}
+	}
+
+	completionRate := 0.0
+	if len(tasks) > 0 {
+		completionRate = float64(completed) / float64(len(tasks)) * 100
+	}
+
+	statsText := fmt.Sprintf(
+		"📊 *Your Statistics*\n\n"+
+			"📋 Total tasks: %d\n"+
+			"✅ Completed: %d\n"+
+			"⭕ Remaining: %d\n"+
+			"📈 Completion rate: %.1f%%\n\n"+
+			"💪 Keep up the great work!",
+		len(tasks), completed, len(tasks)-completed, completionRate,
+	)
+
+	msg := tgbotapi.NewMessage(query.Message.Chat.ID, statsText)
+	msg.ParseMode = "Markdown"
+	s.bot.Send(msg)
+
+	return s.answerCallbackQuery(query.ID, "")
+}
+
 // Helper methods
 
 // getOrCreateUser retrieves or creates a user
@@ -461,6 +624,14 @@ func (s *TelegramService) getOrCreateUser(ctx context.Context, from *tgbotapi.Us
 // sendMessage sends a text message to a chat
 func (s *TelegramService) sendMessage(chatID int64, text string) error {
 	msg := tgbotapi.NewMessage(chatID, text)
+	_, err := s.bot.Send(msg)
+	return err
+}
+
+// sendMarkdownMessage sends a text message with Markdown formatting to a chat
+func (s *TelegramService) sendMarkdownMessage(chatID int64, text string) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
 	_, err := s.bot.Send(msg)
 	return err
 }

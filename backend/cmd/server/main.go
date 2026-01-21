@@ -130,6 +130,8 @@ func main() {
 	// Protected routes (require JWT auth)
 	protected := api.Group("", middleware.AuthMiddleware(authService))
 	protected.Get("/auth/me", authHandler.GetMe)
+
+	// Tasks
 	protected.Get("/tasks", tasksHandler.GetTasks)
 	protected.Post("/tasks", tasksHandler.CreateTask)
 	protected.Patch("/tasks/:id", tasksHandler.UpdateTask)
