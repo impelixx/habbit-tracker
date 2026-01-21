@@ -34,7 +34,7 @@ class ApiService {
     // Add response interceptor to handle errors
     this.client.interceptors.response.use(
       (response) => response,
-      (error: AxiosError<ApiResponse<any>>) => {
+      (error: AxiosError<ApiResponse<unknown>>) => {
         if (error.response?.status === 401) {
           // Token expired or invalid
           this.clearToken();
