@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './hooks/useAuth';
 import { useTasks } from './hooks/useTasks';
+import { useWebSocket } from './hooks/useWebSocket';
 import { TaskList } from './components/TaskList';
 import { TaskForm } from './components/TaskForm';
 import type { Task, CreateTaskRequest } from './types';
@@ -15,7 +16,27 @@ function App() {
     error: tasksError,
     createTask,
     toggleTaskCompletion,
+    handleTaskCreated,
+    handleTaskUpdated,
+    handleTaskDeleted,
   } = useTasks();
+
+  // Initialize WebSocket connection with real-time update handlers
+  const { isConnected, connect } = useWebSocket({
+    onTaskCreated: handleTaskCreated,
+    onTaskUpdated: handleTaskUpdated,
+    onTaskDeleted: handleTaskDeleted,
+  });
+
+  // Connect to WebSocket when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        connect(token);
+      }
+    }
+  }, [isAuthenticated, connect]);
 
   const [showForm, setShowForm] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -83,7 +104,14 @@ function App() {
   return (
     <div>
       <div className="header">
-        <div className="header-title">📋 Habit Tracker</div>
+        <div className="header-title">
+          📋 Habit Tracker
+          {isConnected && (
+            <span style={{ marginLeft: '8px', fontSize: '12px', color: '#4caf50' }}>
+              ● Live
+            </span>
+          )}
+        </div>
         <div className="header-subtitle">
           {tasks.filter((t) => !t.completed).length} active tasks
         </div>
