@@ -20,6 +20,7 @@ type Reminder struct {
 
 // NewReminder creates a new reminder with default values
 func NewReminder(userID primitive.ObjectID, reminderTime, timezone string) *Reminder {
+	now := time.Now()
 	return &Reminder{
 		ID:        primitive.NewObjectID(),
 		UserID:    userID,
@@ -27,7 +28,7 @@ func NewReminder(userID primitive.ObjectID, reminderTime, timezone string) *Remi
 		Timezone:  timezone,
 		Enabled:   true,
 		LastSent:  nil,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
