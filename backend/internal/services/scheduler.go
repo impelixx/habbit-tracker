@@ -8,23 +8,24 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/impelixx/habbit-tracker/backend/internal/db"
 	"github.com/impelixx/habbit-tracker/backend/internal/models"
+	"github.com/impelixx/habbit-tracker/backend/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
 // SchedulerService handles background reminder scheduling
 type SchedulerService struct {
-	db           *db.MongoDB
-	bot          *tgbotapi.BotAPI
-	stopChan     chan struct{}
+	db            *db.MongoDB
+	bot           *tgbotapi.BotAPI
+	stopChan      chan struct{}
 	checkInterval time.Duration
 }
 
 // NewSchedulerService creates a new scheduler service
 func NewSchedulerService(database *db.MongoDB, bot *tgbotapi.BotAPI) *SchedulerService {
 	return &SchedulerService{
-		db:           database,
-		bot:          bot,
-		stopChan:     make(chan struct{}),
+		db:            database,
+		bot:           bot,
+		stopChan:      make(chan struct{}),
 		checkInterval: 1 * time.Minute, // Check every minute
 	}
 }
@@ -74,20 +75,44 @@ func (s *SchedulerService) checkAndSendReminders() error {
 	for _, reminder := range reminders {
 		// Check if it's time to send reminder
 		if s.shouldSendReminder(reminder, now) {
+			// Atomically update the lastSent field to prevent race conditions
+			// This ensures only one scheduler instance sends the reminder
+			updated, err := s.db.AtomicUpdateReminderLastSent(ctx, reminder.ID, reminder.LastSent, now)
+			if err != nil {
+				log.Error().
+					Err(err).
+					Str("userId", reminder.UserID.Hex()).
+					Msg("Failed to atomically update reminder last sent time")
+				continue
+			}
+			
+			// If update failed, another instance already sent the reminder
+			if !updated {
+				log.Debug().
+					Str("userId", reminder.UserID.Hex()).
+					Msg("Reminder already sent by another instance")
+				continue
+			}
+			
+			// Only send if we successfully updated the lastSent field
 			if err := s.sendReminder(ctx, reminder); err != nil {
 				log.Error().
 					Err(err).
 					Str("userId", reminder.UserID.Hex()).
 					Msg("Failed to send reminder")
+				
+				// Revert the lastSent update so the reminder can be retried in the next scheduler run
+				// Note: This revert could fail if another instance updated the reminder after our atomic update,
+				// but that's acceptable as the reminder will be retried in the next scheduler run
+				if revertErr := s.db.UpdateReminderLastSent(ctx, reminder.ID, reminder.LastSent); revertErr != nil {
+					log.Warn().
+						Err(revertErr).
+						Str("userId", reminder.UserID.Hex()).
+						Msg("Failed to revert lastSent after send failure - reminder will retry in next run")
+				}
 				continue
 			}
 			sentCount++
-
-			// Update last sent time
-			reminder.LastSent = &now
-			if err := s.db.UpdateReminder(ctx, reminder); err != nil {
-				log.Error().Err(err).Msg("Failed to update reminder last sent time")
-			}
 		}
 	}
 
@@ -240,8 +265,11 @@ func (s *SchedulerService) buildReminderKeyboard(tasks []*models.Task) [][]tgbot
 	count := 0
 	for _, task := range tasks {
 		if !task.Completed && count < 3 {
+			// Truncate task title to fit Telegram button text limit (max 64 chars)
+			// Reserve space for "✓ " prefix (2 chars) and safety margin
+			truncatedTitle := utils.TruncateText(task.Title, 35)
 			button := tgbotapi.NewInlineKeyboardButtonData(
-				fmt.Sprintf("✓ %s", task.Title),
+				fmt.Sprintf("✓ %s", truncatedTitle),
 				fmt.Sprintf("complete:%s", task.ID.Hex()),
 			)
 			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})

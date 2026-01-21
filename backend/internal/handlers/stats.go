@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -39,10 +40,10 @@ type StatsResponse struct {
 
 // WeekStats represents weekly statistics
 type WeekStats struct {
-	DaysWithTasks     int `json:"daysWithTasks"`
-	DaysCompleted     int `json:"daysCompleted"`
-	TotalTasks        int `json:"totalTasks"`
-	CompletedTasks    int `json:"completedTasks"`
+	DaysWithTasks  int `json:"daysWithTasks"`
+	DaysCompleted  int `json:"daysCompleted"`
+	TotalTasks     int `json:"totalTasks"`
+	CompletedTasks int `json:"completedTasks"`
 }
 
 // GetStats handles GET /api/stats
@@ -139,45 +140,33 @@ func (h *StatsHandler) calculateStreak(tasks []*models.Task) (int, int) {
 	// Calculate current streak (consecutive days with completed tasks)
 	currentStreak := 0
 	longestStreak := 0
-	tempStreak := 0
 
 	// Start from today and go backwards
 	today := time.Now()
-	for i := 0; i < 365; i++ { // Check up to 1 year
-		date := today.AddDate(0, 0, -i).Format("2006-01-02")
-		dayTasks, exists := tasksByDate[date]
-
-		if !exists || len(dayTasks) == 0 {
-			// No tasks for this day
-			if i == 0 {
-				// Today has no tasks, but continue checking
-				continue
-			}
-			// Break current streak
-			break
-		}
+	checkingCurrent := true
+	for i := 0; i < 365 && checkingCurrent; i++ { // Check up to 1 year
+		currentDate := today.AddDate(0, 0, -i)
+		dateStr := currentDate.Format("2006-01-02")
+		dayTasks, exists := tasksByDate[dateStr]
 
 		// Check if at least one task was completed
 		hasCompleted := false
-		for _, task := range dayTasks {
-			if task.Completed {
-				hasCompleted = true
-				break
+		if exists {
+			for _, task := range dayTasks {
+				if task.Completed {
+					hasCompleted = true
+					break
+				}
 			}
 		}
 
 		if hasCompleted {
-			if i == 0 || currentStreak > 0 || tempStreak > 0 {
-				currentStreak++
-				tempStreak++
-				if tempStreak > longestStreak {
-					longestStreak = tempStreak
-				}
-			}
+			currentStreak++
 		} else {
-			// Day had tasks but none completed
+			// No completed tasks for this day
+			// Allow grace for today only (i == 0)
 			if i > 0 {
-				break
+				checkingCurrent = false
 			}
 		}
 	}
@@ -188,17 +177,11 @@ func (h *StatsHandler) calculateStreak(tasks []*models.Task) (int, int) {
 		dates = append(dates, date)
 	}
 
-	// Sort dates (simple bubble sort for small dataset)
-	for i := 0; i < len(dates); i++ {
-		for j := i + 1; j < len(dates); j++ {
-			if dates[i] > dates[j] {
-				dates[i], dates[j] = dates[j], dates[i]
-			}
-		}
-	}
+	// Sort dates using Go's built-in sort for better performance
+	sort.Strings(dates)
 
 	// Calculate longest streak from all dates
-	tempStreak = 0
+	tempStreak := 0
 	for i, date := range dates {
 		dayTasks := tasksByDate[date]
 		hasCompleted := false
@@ -209,25 +192,26 @@ func (h *StatsHandler) calculateStreak(tasks []*models.Task) (int, int) {
 			}
 		}
 
+		// Check for date continuity first (before updating streak)
+		if i > 0 {
+			prevDate, _ := time.Parse("2006-01-02", dates[i-1])
+			currDate, _ := time.Parse("2006-01-02", date)
+			// Check if gap is more than 1 day (24 hours)
+			// Using time.Duration comparison for accuracy
+			if currDate.Sub(prevDate) > 24*time.Hour {
+				// Gap detected, reset streak
+				tempStreak = 0
+			}
+		}
+
 		if hasCompleted {
 			tempStreak++
 			if tempStreak > longestStreak {
 				longestStreak = tempStreak
 			}
 		} else {
+			// No completed tasks, reset streak
 			tempStreak = 0
-		}
-
-		// Check for date continuity
-		if i > 0 {
-			prevDate, _ := time.Parse("2006-01-02", dates[i-1])
-			currDate, _ := time.Parse("2006-01-02", date)
-			if currDate.Sub(prevDate).Hours() > 24*1.5 {
-				tempStreak = 0
-				if hasCompleted {
-					tempStreak = 1
-				}
-			}
 		}
 	}
 
