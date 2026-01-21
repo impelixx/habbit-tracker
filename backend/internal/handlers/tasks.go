@@ -14,13 +14,15 @@ import (
 
 // TasksHandler handles task operations
 type TasksHandler struct {
-	db *db.MongoDB
+	db        *db.MongoDB
+	wsHandler *WebSocketHandler
 }
 
 // NewTasksHandler creates a new tasks handler
-func NewTasksHandler(database *db.MongoDB) *TasksHandler {
+func NewTasksHandler(database *db.MongoDB, wsHandler *WebSocketHandler) *TasksHandler {
 	return &TasksHandler{
-		db: database,
+		db:        database,
+		wsHandler: wsHandler,
 	}
 }
 
@@ -115,6 +117,11 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 		Str("title", task.Title).
 		Msg("Task created via Mini App")
 
+	// Broadcast task creation to WebSocket clients
+	if h.wsHandler != nil {
+		h.wsHandler.BroadcastTaskUpdate(task, "created")
+	}
+
 	return utils.SuccessResponse(c, fiber.Map{"task": task})
 }
 
@@ -182,6 +189,11 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		Bool("completed", task.Completed).
 		Msg("Task updated")
 
+	// Broadcast task update to WebSocket clients
+	if h.wsHandler != nil {
+		h.wsHandler.BroadcastTaskUpdate(task, "updated")
+	}
+
 	return utils.SuccessResponse(c, fiber.Map{"task": task})
 }
 
@@ -219,6 +231,11 @@ func (h *TasksHandler) DeleteTask(c *fiber.Ctx) error {
 	log.Info().
 		Str("taskId", taskID.Hex()).
 		Msg("Task deleted")
+
+	// Broadcast task deletion to WebSocket clients
+	if h.wsHandler != nil {
+		h.wsHandler.BroadcastTaskUpdate(task, "deleted")
+	}
 
 	return utils.MessageResponse(c, "Task deleted successfully")
 }

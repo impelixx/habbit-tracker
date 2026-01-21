@@ -68,6 +68,25 @@ export const useTasks = (date?: string) => {
     return updateTask(id, { completed: !task.completed });
   };
 
+  // WebSocket update handlers
+  const handleTaskCreated = useCallback((task: Task) => {
+    // Only add if not already in list (avoid duplicates from our own actions)
+    setTasks((prev) => {
+      if (prev.some(t => t.id === task.id)) {
+        return prev;
+      }
+      return [...prev, task];
+    });
+  }, []);
+
+  const handleTaskUpdated = useCallback((task: Task) => {
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+  }, []);
+
+  const handleTaskDeleted = useCallback((task: Task) => {
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+  }, []);
+
   return {
     tasks,
     isLoading,
@@ -77,5 +96,9 @@ export const useTasks = (date?: string) => {
     updateTask,
     deleteTask,
     toggleTaskCompletion,
+    // WebSocket handlers
+    handleTaskCreated,
+    handleTaskUpdated,
+    handleTaskDeleted,
   };
 };
