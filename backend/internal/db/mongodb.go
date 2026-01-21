@@ -281,3 +281,19 @@ func (db *MongoDB) UpsertReminder(ctx context.Context, reminder *models.Reminder
 	)
 	return err
 }
+
+// GetEnabledReminders retrieves all enabled reminders
+func (db *MongoDB) GetEnabledReminders(ctx context.Context) ([]*models.Reminder, error) {
+	collection := db.database.Collection("reminders")
+	cursor, err := collection.Find(ctx, bson.M{"enabled": true})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var reminders []*models.Reminder
+	if err := cursor.All(ctx, &reminders); err != nil {
+		return nil, err
+	}
+	return reminders, nil
+}

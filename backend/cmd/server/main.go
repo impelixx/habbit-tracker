@@ -101,6 +101,12 @@ func main() {
 	// Initialize services
 	authService := services.NewAuthService(cfg.JWTSecret, cfg.JWTExpiration, cfg.TelegramBotToken)
 
+	// Initialize reminder scheduler
+	schedulerService := services.NewSchedulerService(database, telegramService.GetBot())
+	schedulerService.Start()
+	defer schedulerService.Stop()
+	log.Info().Msg("Reminder scheduler initialized")
+
 	// Initialize handlers
 	webhookHandler := handlers.NewWebhookHandler(telegramService)
 	authHandler := handlers.NewAuthHandler(authService, database)
