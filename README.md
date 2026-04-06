@@ -1,3 +1,4 @@
+# My sandbox to fun with AI agents to write code
 # Habit Tracker - Telegram Bot + Mini App
 
 A comprehensive habit tracking system built with Telegram Bot + Mini App, featuring AI-powered voice recognition and natural language task parsing.
