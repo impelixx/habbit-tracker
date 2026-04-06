@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -120,9 +121,17 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 
 func getSliceEnv(key string, defaultValue []string) []string {
 	if value := os.Getenv(key); value != "" {
-		// Simple comma-separated parsing
-		// For production, consider more robust parsing
-		return []string{value}
+		parts := strings.Split(value, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
 	}
 	return defaultValue
 }

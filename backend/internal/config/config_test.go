@@ -80,9 +80,11 @@ t.Errorf("RateLimitWindow = %v, want 30s", cfg.RateLimitWindow)
 if cfg.CacheDefaultTTL != 10*time.Minute {
 t.Errorf("CacheDefaultTTL = %v, want 10m", cfg.CacheDefaultTTL)
 }
-if len(cfg.AllowedOrigins) != 1 || cfg.AllowedOrigins[0] != "https://example.com,https://app.example.com" {
-t.Errorf("AllowedOrigins = %#v, expected single comma-separated value", cfg.AllowedOrigins)
-}
+	if len(cfg.AllowedOrigins) != 2 ||
+		cfg.AllowedOrigins[0] != "https://example.com" ||
+		cfg.AllowedOrigins[1] != "https://app.example.com" {
+		t.Errorf("AllowedOrigins = %#v, expected split values", cfg.AllowedOrigins)
+	}
 }
 
 func TestValidate(t *testing.T) {
@@ -169,11 +171,23 @@ if got := getDurationEnv("TEST_DUR", time.Minute); got != time.Minute {
 t.Errorf("getDurationEnv() should fall back to default, got %v", got)
 }
 
-t.Setenv("TEST_SLICE", "a,b")
-got := getSliceEnv("TEST_SLICE", []string{"x"})
-if len(got) != 1 || got[0] != "a,b" {
-t.Errorf("getSliceEnv() = %#v, want []string{\"a,b\"}", got)
-}
+	t.Setenv("TEST_SLICE", "a,b")
+	got := getSliceEnv("TEST_SLICE", []string{"x"})
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Errorf("getSliceEnv() = %#v, want []string{\"a\", \"b\"}", got)
+	}
+
+	t.Setenv("TEST_SLICE", "a, b , ,c")
+	got = getSliceEnv("TEST_SLICE", []string{"x"})
+	if len(got) != 3 || got[0] != "a" || got[1] != "b" || got[2] != "c" {
+		t.Errorf("getSliceEnv() trimmed = %#v, want []string{\"a\", \"b\", \"c\"}", got)
+	}
+
+	t.Setenv("TEST_SLICE", " , ")
+	got = getSliceEnv("TEST_SLICE", []string{"x"})
+	if len(got) != 1 || got[0] != "x" {
+		t.Errorf("getSliceEnv() empty entries fallback = %#v, want []string{\"x\"}", got)
+	}
 
 got = getSliceEnv("MISSING_TEST_SLICE", []string{"x"})
 if len(got) != 1 || got[0] != "x" {
