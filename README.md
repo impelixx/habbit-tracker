@@ -156,6 +156,13 @@ go run cmd/server/main.go
 docker-compose up backend
 ```
 
+Run full stack (MongoDB + Backend + Frontend):
+```bash
+docker-compose up -d
+```
+
+Frontend will be available at `http://localhost:3000`
+
 #### 5. Set up Telegram Webhook (for local testing)
 
 In a separate terminal, expose your local server:
