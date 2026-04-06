@@ -163,6 +163,15 @@ docker-compose up -d
 
 Frontend will be available at `http://localhost:3000`
 
+For VPS/public deployment, set frontend build args so browser clients can reach your backend host:
+```bash
+export FRONTEND_VITE_API_URL=https://your-domain-or-ip
+export FRONTEND_VITE_WS_URL=wss://your-domain-or-ip/api/ws
+docker-compose up -d --build frontend
+```
+
+Use `https/wss` only when TLS is configured (for example via reverse proxy); otherwise use `http/ws`.
+
 #### 5. Set up Telegram Webhook (for local testing)
 
 In a separate terminal, expose your local server:
