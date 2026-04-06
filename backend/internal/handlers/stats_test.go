@@ -52,7 +52,7 @@ func TestCalculateStreak(t *testing.T) {
 				createCompletedTask(userID, today.Add(-96*time.Hour), "Task 4"),
 			},
 			wantCurrent: 2,
-			wantLongest: 2, // Longest consecutive streak
+			wantLongest: 2,
 		},
 		{
 			name: "Incomplete tasks don't count",
@@ -86,7 +86,7 @@ func TestCalculateStreak(t *testing.T) {
 				createCompletedTask(userID, today.Add(-144*time.Hour), "Task 5"),
 			},
 			wantCurrent: 1,
-			wantLongest: 4, // Longest consecutive streak (4 days from Task 2-5)
+			wantLongest: 4,
 		},
 	}
 

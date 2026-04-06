@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config contains application configuration loaded from environment variables.
 type Config struct {
 	// Server
 	Port        string

@@ -133,7 +133,7 @@ export class WebSocketClient {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  send(data: any) {
+  send(data: unknown) {
     if (!this.isConnected()) {
       console.warn('WebSocket: Cannot send message, not connected');
       return;
