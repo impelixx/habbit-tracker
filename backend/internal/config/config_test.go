@@ -6,9 +6,10 @@ import (
 )
 
 func TestLoad_WithDefaultsAndRequiredEnv(t *testing.T) {
-t.Setenv("TELEGRAM_BOT_TOKEN", "token")
-t.Setenv("MONGODB_URI", "mongodb://localhost:27017")
-t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("TELEGRAM_BOT_TOKEN", "token")
+	t.Setenv("MONGODB_URI", "mongodb://localhost:27017")
+	t.Setenv("MONGODB_DATABASE", "")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 cfg, err := Load()
 if err != nil {
